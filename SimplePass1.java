@@ -11,6 +11,7 @@ public class SimplePass1 {
         Map.entry("EQU", "AD,04"), Map.entry("LTORG", "AD,05"),
         Map.entry("DC", "DL,01"), Map.entry("DS", "DL,02")
     );
+
     Map<String, String> regtab = Map.of("AREG", "1", "BREG", "2", "CREG", "3");
     Map<String, String> condtab = Map.of("LT", "1", "LE", "2", "EQ", "3", "GT", "4", "GE", "5", "ANY", "6");
 
@@ -24,6 +25,7 @@ public class SimplePass1 {
     }
 
     int litIndex(String l) {
+        l = l.trim();
         for (int i = pooltab.get(pooltab.size() - 1); i < littab.size(); i++)
             if (littab.get(i).equals(l)) return i;
         littab.add(l); litaddr.add(-1);
@@ -31,10 +33,13 @@ public class SimplePass1 {
     }
 
     void processLiterals() {
-        for (int i = pooltab.get(pooltab.size() - 1); i < littab.size(); i++) {
+        int start = pooltab.get(pooltab.size() - 1);
+        if (start == littab.size()) return; // nothing new
+        for (int i = start; i < littab.size(); i++) {
             litaddr.set(i, lc);
-            String v = littab.get(i).replaceAll("[=' ]", "");
-            ic.add(lc++ + "\t(DL,01) (C," + v + ")");
+            String v = littab.get(i).replaceAll("[=’' ]", "");
+            ic.add(lc + "\t(DL,01) (C," + v + ")");
+            lc++;
         }
         pooltab.add(littab.size());
     }
@@ -42,30 +47,66 @@ public class SimplePass1 {
     void run(String file) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             for (String line; (line = br.readLine()) != null;) {
-                String[] p = line.trim().replaceAll(",", " ").split("\\s+");
-                if (p.length == 0) continue;
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                String[] p = line.replaceAll(",", " ").split("\\s+");
                 int i = 0;
+
+                // label
                 if (!optab.containsKey(p[0])) { symaddr.set(symIndex(p[0]), lc); i++; }
 
+                if (i >= p.length) continue;
                 String m = p[i++], op1 = (i < p.length ? p[i++] : null), op2 = (i < p.length ? p[i] : null);
-                String[] info = optab.get(m).split(","); String type = info[0], code = info[1];
+                String[] info = optab.get(m).split(",");
+                String type = info[0], code = info[1];
 
                 switch (type) {
                     case "AD" -> {
-                        if (m.equals("START")) { lc = Integer.parseInt(op1); ic.add("(AD," + code + ") (C," + op1 + ")"); }
-                        else if (m.equals("END")) { processLiterals(); ic.add("(AD," + code + ")"); }
-                        else if (m.equals("LTORG")) { ic.add(lc + "\t(AD," + code + ")"); processLiterals(); }
+                        if (m.equals("START")) {
+                            lc = Integer.parseInt(op1);
+                            ic.add("(AD," + code + ") (C," + op1 + ")");
+                        } else if (m.equals("LTORG")) {
+                            ic.add(lc + "\t(AD," + code + ")");
+                            processLiterals();
+                        } else if (m.equals("END")) {
+                            // Only flush if new literals added since last pool
+                            int start = pooltab.get(pooltab.size() - 1);
+                            if (start < littab.size()) processLiterals();
+                            ic.add("(AD," + code + ")");
+                        } else if (m.equals("ORIGIN")) {
+                            if (op1.contains("+")) {
+                                String[] parts = op1.split("\\+");
+                                lc = symaddr.get(symIndex(parts[0])) + Integer.parseInt(parts[1]);
+                            } else if (op1.contains("-")) {
+                                String[] parts = op1.split("\\-");
+                                lc = symaddr.get(symIndex(parts[0])) - Integer.parseInt(parts[1]);
+                            } else lc = symaddr.get(symIndex(op1));
+                            ic.add("(AD," + code + ") (C," + lc + ")");
+                        } else if (m.equals("EQU")) {
+                            int addr = symaddr.get(symIndex(op1));
+                            symaddr.set(symIndex(p[0]), addr);
+                            ic.add("(AD," + code + ")");
+                        }
                     }
+
                     case "DL" -> {
-                        ic.add(lc + "\t(DL," + code + ") (C," + op1.replaceAll("['=]", "") + ")");
-                        lc += m.equals("DS") ? Integer.parseInt(op1) : 1;
+                        String val = op1.replaceAll("[=’']", "");
+                        ic.add(lc + "\t(DL," + code + ") (C," + val + ")");
+                        lc += m.equals("DS") ? Integer.parseInt(val) : 1;
                     }
+
                     case "IS" -> {
                         String icLine = lc + "\t(IS," + code + ") ";
                         if (m.equals("STOP")) { ic.add(icLine); lc++; continue; }
-                        if (m.equals("READ") || m.equals("PRINT")) { ic.add(icLine + "(S," + symIndex(op1) + ")"); lc++; continue; }
+                        if (m.equals("READ") || m.equals("PRINT")) {
+                            ic.add(icLine + "(S," + symIndex(op1) + ")"); lc++; continue;
+                        }
                         icLine += m.equals("BC") ? "(" + condtab.get(op1) + ") " : "(" + regtab.get(op1) + ") ";
-                        icLine += op2.startsWith("=") ? "(L," + litIndex(op2) + ")" : "(S," + symIndex(op2) + ")";
+                        if (op2.startsWith("="))
+                            icLine += "(L," + litIndex(op2) + ")";
+                        else
+                            icLine += "(S," + symIndex(op2) + ")";
                         ic.add(icLine); lc++;
                     }
                 }
@@ -79,19 +120,31 @@ public class SimplePass1 {
         write("symtab.txt", List.of("--- Symbol Table ---", "Index\tSymbol\tAddress"));
         for (int i = 0; i < symtab.size(); i++)
             append("symtab.txt", i + "\t" + symtab.get(i) + "\t" + symaddr.get(i));
+
         write("littab.txt", List.of("--- Literal Table ---", "Index\tLiteral\tAddress"));
         for (int i = 0; i < littab.size(); i++)
             append("littab.txt", i + "\t" + littab.get(i) + "\t" + litaddr.get(i));
+
         write("pooltab.txt", List.of("--- Pool Table ---", "Pool Start Index"));
         for (int i : pooltab) append("pooltab.txt", "" + i);
     }
 
-    void write(String f, List<String> l) throws IOException { try (BufferedWriter w = new BufferedWriter(new FileWriter(f))) { for (String s : l) w.write(s + "\n"); } }
-    void append(String f, String s) throws IOException { try (BufferedWriter w = new BufferedWriter(new FileWriter(f, true))) { w.write(s + "\n"); } }
+    void write(String f, List<String> l) throws IOException {
+        try (BufferedWriter w = new BufferedWriter(new FileWriter(f))) {
+            for (String s : l) w.write(s + "\n");
+        }
+    }
+
+    void append(String f, String s) throws IOException {
+        try (BufferedWriter w = new BufferedWriter(new FileWriter(f, true))) {
+            w.write(s + "\n");
+        }
+    }
 
     public static void main(String[] a) {
-        try { new SimplePass1().run("input.asm"); 
-        System.out.println("Pass-1 done. Check output files."); }
-        catch (IOException e) { e.printStackTrace(); }
+        try {
+            new SimplePass1().run("input.asm");
+            System.out.println("Pass-1 done. Check output files.");
+        } catch (IOException e) { e.printStackTrace(); }
     }
 }
