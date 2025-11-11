@@ -1,43 +1,47 @@
-package db_echoServer;
 import java.io.*;
 import java.net.*;
-import java.util.*;
 
 class ClientHandler extends Thread {
-    Socket socket;
+    private final Socket socket;
+
     ClientHandler(Socket socket) {
         this.socket = socket;
     }
 
+    @Override
     public void run() {
-        try {
-            Scanner in = new Scanner(socket.getInputStream());
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+        try (
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
+        ) {
+            String clientInfo = socket.getInetAddress().getHostAddress() + ":" + socket.getPort();
+            System.out.println("Client connected: " + clientInfo);
 
-            while (in.hasNextLine()) {
-                String msg = in.nextLine();
-                System.out.println("Client: " + msg);
+            String msg;
+            while ((msg = in.readLine()) != null) {
+                System.out.println("[" + clientInfo + "] says: " + msg);
                 out.println("Echo: " + msg);
             }
 
-            in.close();
-            socket.close();
-            System.out.println("Client disconnected.");
+            System.out.println("Client disconnected: " + clientInfo);
         } catch (IOException e) {
-            System.out.println("Error: " + e.getMessage());
+            System.out.println("Connection error: " + e.getMessage());
         }
     }
 }
 
 public class EchoServer {
-    public static void main(String[] args) throws IOException {
-        ServerSocket server = new ServerSocket(5000);
+    public static void main(String[] args) {
+        final int PORT = 5000;
         System.out.println("Server started. Waiting for clients...");
 
-        while (true) {
-            Socket socket = server.accept();
-            System.out.println("New client connected.");
-            new ClientHandler(socket).start();
+        try (ServerSocket server = new ServerSocket(PORT)) {
+            while (true) {
+                Socket socket = server.accept();
+                new ClientHandler(socket).start(); // Handle each client in new thread
+            }
+        } catch (IOException e) {
+            System.out.println("Server error: " + e.getMessage());
         }
     }
 }
