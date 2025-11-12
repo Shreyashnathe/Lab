@@ -65,7 +65,7 @@ public class Pass2 {
                             addr = fmt(symtab.get(idx));
                         } else if (t.contains("L,")) {
                             int idx = Integer.parseInt(t.split(",")[1]);
-                            addr = fmt(littab.get(idx)); // ✅ Fix: correctly maps literal index to address
+                            addr = fmt(littab.get(idx));
                         }
                     }
 
@@ -75,10 +75,10 @@ public class Pass2 {
 
             br.close();
             bw.close();
-            System.out.println("✅ Pass-2 done. Check machine_code.txt.");
+            System.out.println(" Pass-2 done. Check machine_code.txt.");
 
         } catch (Exception e) {
-            System.out.println("❌ Error: " + e.getMessage());
+            System.out.println("Error: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -101,7 +101,7 @@ public class Pass2 {
                 }
             }
         } catch (IOException e) {
-            System.out.println("⚠️  Note: " + filename + " not found.");
+            System.out.println("Note: " + filename + " not found.");
         }
         return table;
     }
@@ -113,3 +113,4 @@ public class Pass2 {
         return String.format("%03d", Integer.parseInt(s));
     }
 }
+
