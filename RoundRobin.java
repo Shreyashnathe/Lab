@@ -2,51 +2,66 @@ package B2_SchedulingAlgo;
 import java.util.*;
 
 public class RoundRobin {
+	static class Process {
+	    int pid, at, bt, rt, ct, tat, wt;
+	    Process(int pid, int at, int bt) {
+	        this.pid = pid;
+	        this.at = at;
+	        this.bt = bt;
+	        this.rt = bt;
+	    }
+	}
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         System.out.print("Enter number of processes: ");
         int n = sc.nextInt();
 
-        int[] at = new int[n], bt = new int[n], rt = new int[n], ct = new int[n], tat = new int[n], wt = new int[n];
-        for (int i = 0; i < n; i++) {
-            System.out.print("Enter Arrival & Burst Time for P" + (i + 1) + ": ");
-            at[i] = sc.nextInt(); bt[i] = sc.nextInt(); rt[i] = bt[i];
+        List<Process> list = new ArrayList<>();
+        for (int i = 1; i <= n; i++) {
+            System.out.print("Enter Arrival & Burst Time for P" + i + ": ");
+            list.add(new Process(i, sc.nextInt(), sc.nextInt()));
         }
 
         System.out.print("Enter Time Quantum: ");
         int tq = sc.nextInt(), time = 0, done = 0;
-        Queue<Integer> q = new LinkedList<>();
+        Queue<Process> q = new LinkedList<>();
 
         while (done < n) {
-            for (int i = 0; i < n; i++)
-                if (at[i] <= time && rt[i] > 0 && !q.contains(i)) q.add(i);
+            for (Process p : list)
+                if (p.at <= time && p.rt > 0 && !q.contains(p)) q.add(p);
 
             if (q.isEmpty()) { time++; continue; }
 
-            int i = q.poll(), run = Math.min(tq, rt[i]);
-            rt[i] -= run; time += run;
+            Process p = q.poll();
+            int exec = Math.min(tq, p.rt);
+            p.rt -= exec; time += exec;
 
-            for (int j = 0; j < n; j++)
-                if (at[j] <= time && rt[j] > 0 && !q.contains(j)) q.add(j);
+            for (Process np : list)
+                if (np.at <= time && np.rt > 0 && !q.contains(np)) q.add(np);
 
-            if (rt[i] == 0) {
-                ct[i] = time;
-                tat[i] = ct[i] - at[i];
-                wt[i] = tat[i] - bt[i];
+            if (p.rt == 0) {
+                p.ct = time;
+                p.tat = p.ct - p.at;
+                p.wt = p.tat - p.bt;
                 done++;
-            } else q.add(i);
+            } else q.add(p);
         }
 
         double avgTAT = 0, avgWT = 0;
-        System.out.println("\nPID\tAT\tBT\tCT\tTAT\tWT");
-        for (int i = 0; i < n; i++) {
-            avgTAT += tat[i]; avgWT += wt[i];
-            System.out.printf("P%d\t%d\t%d\t%d\t%d\t%d\n", i + 1, at[i], bt[i], ct[i], tat[i], wt[i]);
+        System.out.println("\n--- Round Robin Scheduling ---");
+        System.out.println("PID\tAT\tBT\tCT\tTAT\tWT");
+
+        for (Process p : list) {
+            avgTAT += p.tat;
+            avgWT += p.wt;
+            System.out.printf("P%d\t%d\t%d\t%d\t%d\t%d\n", p.pid, p.at, p.bt, p.ct, p.tat, p.wt);
         }
+
         System.out.printf("\nAverage TAT = %.2f\nAverage WT = %.2f\n", avgTAT / n, avgWT / n);
         sc.close();
     }
 }
+
 //1 150
 //2 100
 //3 200
